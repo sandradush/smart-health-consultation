@@ -1,51 +1,126 @@
-import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:smart_health_consultation/features/auth/models/auth_response.dart';
+import '../models/user.dart';
+import '../services/auth_service.dart';
 
 class AuthProvider with ChangeNotifier {
+  User? _user;
   bool _isLoading = false;
-  String? _error;
-  String? _userToken;
-  String? _userEmail;
+  bool _isAuthenticated = false;
 
+  User? get user => _user;
   bool get isLoading => _isLoading;
-  String? get error => _error;
-  String? get userToken => _userToken;
-  String? get userEmail => _userEmail;
+  bool get isAuthenticated => _isAuthenticated;
 
-  Future<bool> login({
-    required String email,
-    required String password,
-  }) async {
+  final AuthService _authService = AuthService();
+
+  AuthProvider() {
+    checkAuthStatus();
+  }
+
+  Future<void> checkAuthStatus() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token');
+    
+    if (token != null) {
+      _isAuthenticated = true;
+      notifyListeners();
+    }
+  }
+
+  Future<AuthResponse> login(String email, String password) async {
     _isLoading = true;
-    _error = null;
     notifyListeners();
 
-    // Simulate API call delay
-    await Future.delayed(const Duration(seconds: 1));
+    try {
+      final response = await _authService.login(email, password);
+      
+      if (response.success && response.user != null) {
+        _user = response.user;
+        _isAuthenticated = true;
+        
+        final prefs = await SharedPreferences.getInstance();
+        if (response.token != null) {
+          prefs.setString('token', response.token!);
+        }
+        if (response.user != null) {
+          prefs.setString('userData', json.encode(response.user!.toJson()));
+        }
+      }
+      
+      return response;
+    } catch (e) {
+      return AuthResponse(
+        success: false,
+        message: 'An error occurred: $e',
+      );
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
 
-    // Mock login logic
-    if (email.isNotEmpty && password.isNotEmpty) {
-      _userToken = 'mock_jwt_token';
-      _userEmail = email;
+  Future<AuthResponse> register(
+    String name,
+    String email,
+    String phone,
+    String password,
+  ) async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      final response = await _authService.register(
+        name,
+        email,
+        phone,
+        password,
+      );
       
-      // Store in memory (temporary for testing)
-      // In production, use secure storage
+      if (response.success && response.user != null) {
+        _user = response.user;
+        _isAuthenticated = true;
+        
+        final prefs = await SharedPreferences.getInstance();
+        if (response.token != null) {
+          prefs.setString('token', response.token!);
+        }
+        if (response.user != null) {
+          prefs.setString('userData', json.encode(response.user!.toJson()));
+        }
+      }
       
+      return response;
+    } catch (e) {
+      return AuthResponse(
+        success: false,
+        message: 'An error occurred: $e',
+      );
+    } finally {
       _isLoading = false;
       notifyListeners();
-      return true;
-    } else {
-      _error = 'Invalid email or password';
-      _isLoading = false;
-      notifyListeners();
-      return false;
     }
   }
 
   Future<void> logout() async {
-    _userToken = null;
-    _userEmail = null;
+    _isLoading = true;
     notifyListeners();
-  }
 
-  bool get isAuthenticated => _userToken != null;
+    try {
+      await _authService.logout();
+      
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.clear();
+      
+      _user = null;
+      _isAuthenticated = false;
+    } catch (e) {
+      print('Logout error: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
 }

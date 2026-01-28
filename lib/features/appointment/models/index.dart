@@ -4,3 +4,5 @@ export 'appointment_booking_request.dart';
 export 'booking_response.dart';
 export 'doctor.dart';
 export 'time_slot.dart';
+export 'appointment_statistics.dart';
+export 'consultation_type.dart';
